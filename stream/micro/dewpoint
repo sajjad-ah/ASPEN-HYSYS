@@ -1,0 +1,13 @@
+Sub PostExecute()
+On Error GoTo ErrorHandler
+Dim myFluid As Object
+ActiveVariableWrapper.Variable.Erase
+Set myFluid = ActiveObject.DuplicateFluid
+FS = 0
+FS = myFluid.PVFlash(ActiveObject.PressureValue, 1.0)
+If FS = 0 Then ' fsFlashOK
+ActiveVariableWrapper.Variable.SetValue(myFluid.Temperature.GetValue)
+End If
+ErrorHandler:
+Exit Sub
+End Sub
