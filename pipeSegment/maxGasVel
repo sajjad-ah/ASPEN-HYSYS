@@ -1,0 +1,14 @@
+Sub PostExecute()
+	On Error GoTo ErrorHandler
+	Dim Density As Double
+	Dim MaxGasV As Double
+
+	ActiveVariableWrapper.Variable.Erase
+
+	Density = activeobject.FeedStream.MassDensityValue
+	MaxGasV= 122 / Sqr(Density)
+	ActiveVariableWrapper.Variable.SetValue (MaxGasV)
+
+	ErrorHandler:
+Exit Sub
+End Sub
