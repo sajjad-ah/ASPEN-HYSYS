@@ -1,0 +1,22 @@
+Sub PostExecute()
+On Error GoTo ErrorHandler
+Dim MyFluid As Object
+ActiveVariableWrapper.Variable.Erase
+Set MyFluid = ActiveObject.DuplicateFluid
+Dim VapFrac As Double
+VapFrac = 0
+Const Zero As Double = 0.0
+VapFrac = MyFluid.VapourFraction.GetValue
+
+ Dim Convergence As Integer
+ Convergence = 0
+ Convergence = MyFluid.TVFlash(activeobject.TemperatureValue, Zero)
+ If Convergence = 0 Then 
+ ActiveVariableWrapper.Variable.SetValue (MyFluid.Pressure.GetValue)
+ Else
+ ActiveVariableWrapper.Variable.SetValue (Zero)
+ End If
+
+ErrorHandler:
+ Exit Sub
+End Sub
