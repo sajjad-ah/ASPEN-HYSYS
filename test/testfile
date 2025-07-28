@@ -7,3 +7,9 @@ case = unisim.SimulationCases.Open(file_path)
 # Navigate to subflowsheet and stream
 main_flowsheet = case.Flowsheet
 tpl2 = main_flowsheet.Flowsheets.Item("TPL2")
+
+st1 = main_flowsheet.Streams.Item("From")
+mass_flow_st1 = st1.MassFlow.GetValue("KG/H")
+
+st2 = tpl2.Streams.Item("2")
+mass_flow_st2 = st2.MassFlow.GetValue("KG/H")
