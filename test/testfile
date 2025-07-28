@@ -1,1 +1,9 @@
+# Initialize UniSim Design connection
+unisim = win32com.client.Dispatch("UniSimDesign.Application")
+unisim.Visible = True  # Make UniSim visible
+file_path = r"C:\........\test.usc"
+case = unisim.SimulationCases.Open(file_path)
 
+# Navigate to subflowsheet and stream
+main_flowsheet = case.Flowsheet
+tpl2 = main_flowsheet.Flowsheets.Item("TPL2")
