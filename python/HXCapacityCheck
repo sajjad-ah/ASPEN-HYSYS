@@ -1,0 +1,68 @@
+import math
+import win32com.client
+
+
+class Nozzle:
+    def __init__(self, outer_diameter_mm, wall_thickness_mm):
+        self.outer_diameter_mm = outer_diameter_mm
+        self.wall_thickness_mm = wall_thickness_mm
+        self.inner_diameter_mm = self.outer_diameter_mm - 2 * self.wall_thickness_mm
+        self.inner_diameter_m = self.inner_diameter_mm / 1000
+        self.nzzlcross_section_m2 = self.calculate_area()
+
+    def calculate_area(self):
+        return (math.pi / 4) * self.inner_diameter_m ** 2
+    
+    
+class HeatExchangeTagXXX:
+    def __init__(self):
+        
+        self.gas_in_nozzle  = Nozzle(100, 2)
+        self.gas_out_nozzle = Nozzle(100, 2)
+        self.com_in_nozzle  = Nozzle(50, 2)
+        self.com_out_nozzle = Nozzle(50, 2)
+        
+        
+        self.read_unisim_data()
+        self.perform_unisim_based_calculations()
+
+
+    def read_unisim_data(self):
+            print("\nReading data from UniSim...\n")
+            self.unisim = win32com.client.Dispatch("UniSimDesign.Application")
+            self.unisim.Visible = True
+            file_path = r"C:\Users\sahm\Downloads\CapacityCheck\1.usc"
+            self.case = self.unisim.SimulationCases.Open(file_path) 
+            
+            self.main_flowsheet = self.case.Flowsheet
+            self.tpl18 = self.main_flowsheet.Flowsheets.Item("TPL18")
+            self.heat_exchanger = self.tpl18.Operations.Item("TagXXX")            
+            
+            self.gas_in_stream_hx = self.heat_exchanger.FeedStreamVar.Object
+            self.gas_in_density = self.gas_in_stream_hx.MassDensity.GetValue("KG/M3")
+            self.gas_in_Mflow = self.gas_in_stream_hx.MassFlow.GetValue("KG/H")
+            self.gas_in_Vflow = self.gas_in_stream_hx.ActualVolumeFlow.GetValue("M3/H")
+            
+            
+            self.gas_out_stream_hx = self.heat_exchanger.ProductStreamVar.Object
+            self.gas_out_density = self.gas_out_stream_hx.MassDensity.GetValue("KG/M3")
+            self.gas_out_Mflow = self.gas_out_stream_hx.MassFlow.GetValue("KG/H")
+            self.gas_out_Vflow = self.gas_out_stream_hx.ActualVolumeFlow.GetValue("M3/H")
+            
+            self.heat_duty = self.heat_exchanger.Duty.GetValue("KW")
+            
+            
+    def perform_unisim_based_calculations(self):
+        
+            self.gas_in_vel_nozzle_ms = self.gas_in_Vflow / self.gas_in_nozzle.nzzlcross_section_m2 /3600
+            self.gas_in_momentum      = self.gas_in_density * self.gas_in_vel_nozzle_ms**2
+            
+            self.gas_out_vel_nozzle_ms = self.gas_out_Vflow / self.gas_out_nozzle.nzzlcross_section_m2 /3600
+            self.gas_out_momentum      = self.gas_out_density * self.gas_out_vel_nozzle_ms**2   
+            
+            
+            print(f"Velocity at Gas-in nozzle (m/s): {self.gas_in_vel_nozzle_ms:.4f}")        
+            print(f"Gas-in nozzle momentum (kg/m/s²): {self.gas_in_momentum:.4f}\n")
+            
+            print(f"Velocity at Gas-out nozzle (m/s): {self.gas_out_vel_nozzle_ms:.4f}")        
+            print(f"Gas-out nozzle momentum (kg/m/s²): {self.gas_out_momentum:.4f}\n")
