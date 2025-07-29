@@ -1,0 +1,97 @@
+import math
+import win32com.client
+
+
+class Nozzle:
+    def __init__(self, outer_diameter_mm, wall_thickness_mm):
+        self.outer_diameter_mm = outer_diameter_mm
+        self.wall_thickness_mm = wall_thickness_mm
+        self.inner_diameter_mm = self.outer_diameter_mm - 2 * self.wall_thickness_mm
+        self.inner_diameter_m = self.inner_diameter_mm / 1000
+        self.nzzlcross_section_m2 = self.calculate_area()
+
+    def calculate_area(self):
+        return (math.pi / 4) * self.inner_diameter_m ** 2
+
+
+
+class ScrubberTagXXX:
+    def __init__(self, internal_diameter_m):
+        self.internal_diameter_m = internal_diameter_m
+        self.internal_cross_sec_m2 = self.calculate_area(self.internal_diameter_m)
+
+        self.inlet_nozzle = Nozzle(100, 2)
+        self.gas_outlet_nozzle = Nozzle(100, 2)
+        self.liquid_outlet_nozzle = Nozzle(50, 2)
+
+        self.read_unisim_data()
+        self.perform_unisim_based_calculations()
+
+    def calculate_area(self, diameter_m):
+        return (math.pi / 4) * diameter_m ** 2
+
+    def read_unisim_data(self):
+        print("\nReading data from UniSim...\n")
+        self.unisim = win32com.client.Dispatch("UniSimDesign.Application")
+        self.unisim.Visible = True
+        file_path = r"C:\Users\sahm\Downloads\CapacityCheck\1.usc"
+        self.case = self.unisim.SimulationCases.Open(file_path) 
+        
+        
+        self.main_flowsheet = self.case.Flowsheet
+        self.tpl18 = self.main_flowsheet.Flowsheets.Item("TPL18")
+        self.scrubber = self.tpl18.Operations.Item("TagXXX")
+
+        self.flow_in = self.scrubber.Feeds.Item(0).DuplicateFluid()
+
+        self.vap_inl_density = self.flow_in.FluidPhases.Item(0).MassDensity.GetValue("KG/M3")
+        self.vap_inl_Mflow = self.flow_in.FluidPhases.Item(0).MassFlow.GetValue("KG/H")
+        self.vap_inl_Vflow = self.flow_in.FluidPhases.Item(0).ActualVolumeFlow.GetValue("M3/H")
+
+        self.liq_inl_density = self.flow_in.FluidPhases.Item(1).MassDensity.GetValue("KG/M3")
+        self.liq_inl_Mflow = self.flow_in.FluidPhases.Item(1).MassFlow.GetValue("KG/H")
+        self.liq_inl_Vflow = self.flow_in.FluidPhases.Item(1).ActualVolumeFlow.GetValue("M3/H")
+
+        self.total_inl_Vflow = self.vap_inl_Vflow + self.liq_inl_Vflow
+        self.total_inl_Mflow = self.vap_inl_Mflow + self.liq_inl_Mflow
+
+        self.gas_out_stream = self.scrubber.VapourProductVar.Object
+        self.liq_out_stream = self.scrubber.LiquidProductVar.Object
+
+        self.vap_out_density = self.gas_out_stream.MassDensity.GetValue("KG/M3")
+        self.vap_out_Mflow = self.gas_out_stream.MassFlow.GetValue("KG/H")
+        self.vap_out_Vflow = self.gas_out_stream.ActualVolumeFlow.GetValue("M3/H")
+
+        self.liq_out_density = self.liq_out_stream.MassDensity.GetValue("KG/M3")
+        self.liq_out_Mflow = self.liq_out_stream.MassFlow.GetValue("KG/H")
+        self.liq_out_Vflow = self.liq_out_stream.ActualVolumeFlow.GetValue("M3/H")
+
+    def perform_unisim_based_calculations(self):
+        self.Vs_superficial_velocity_ms = self.total_inl_Vflow / self.internal_cross_sec_m2 /3600
+        self.K_value_ms = self.Vs_superficial_velocity_ms * ((self.vap_inl_density / (self.liq_inl_density - self.vap_inl_density)) ** 0.5)
+        self.velocity_inl_nozzle_ms = self.total_inl_Vflow / self.inlet_nozzle.nzzlcross_section_m2/3600
+        self.inl_momentum = (self.total_inl_Mflow / self.total_inl_Vflow) * (self.velocity_inl_nozzle_ms**2)
+        
+        self.vel_vap_out_nozzle_ms = self.vap_out_Vflow / self.gas_outlet_nozzle.nzzlcross_section_m2 /3600
+        self.vap_out_momentum = self.vap_out_density * self.vel_vap_out_nozzle_ms**2
+        
+        self.vel_liq_out_nozzle_ms = self.liq_out_Vflow / self.liquid_outlet_nozzle.nzzlcross_section_m2 /3600
+        self.liq_out_momentum = self.liq_out_density * self.vel_liq_out_nozzle_ms**2
+        
+
+        print(f"Superficial velocity (m/s): {self.Vs_superficial_velocity_ms:.4f}")
+        print(f"K-value (m/s): {self.K_value_ms:.4f}")
+        print(f"Velocity at inlet nozzle (m/s): {self.velocity_inl_nozzle_ms:.4f}")        
+        print(f"Inlet momentum (kg/m/s²): {self.inl_momentum:.4f}\n")
+        
+        print(f"Velocity at vapour-out nozzle (m/s): {self.vel_vap_out_nozzle_ms:.4f}")        
+        print(f"Vapour-out momentum (kg/m/s²): {self.vap_out_momentum:.4f}\n")
+        
+        print(f"Velocity at liquid-out nozzle (m/s): {self.vel_liq_out_nozzle_ms:.4f}")
+        print(f"Liquid-out momentum (kg/m/s²): {self.liq_out_momentum:.4f}\n")
+
+        
+
+
+if __name__ == "__main__":
+    scrubber = Scrubber26VG701(internal_diameter_m= 5)
