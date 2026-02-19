@@ -1,0 +1,68 @@
+import win32com.client
+
+class CMPPowerKW:
+    def __init__(self):
+        print("\nReading data from UniSim...\n")
+        # Connect to UniSim
+        self.unisim = win32com.client.Dispatch("UniSimDesign.Application")
+        self.unisim.Visible = True
+
+        # Open the UniSim file
+        #file_path = r"C:\Users\s.ahmadi\Downloads\CapacityCheck\CMPDuty\1-Reference\Reference-sim5.usc"
+        file_path = r"C:\Users\s.ahmadi\Downloads\CapacityCheck\CMPDuty\1BConcept1B-sim4_.usc"
+        self.case = self.unisim.SimulationCases.Open(file_path)
+
+        # Flowsheets
+        self.main_flowsheet = self.case.Flowsheet
+        #self.tpl13 = self.main_flowsheet.Flowsheets.Item("TPL13")
+        self.tpl18 = self.main_flowsheet.Flowsheets.Item("TPL18")
+
+        # Compressors with custom labels
+        #self.compressors_tpl13 = {
+            #"26KA601": "ReInjection-1st",
+            #"26KA602": "ReInjection-2nd"
+        #}
+        self.compressors_tpl18 = {
+            "26KA750": "LTB"
+        }
+        self.compressors_main = {            
+            "23KA500": "1st Stage ReCmp",
+            "23KA501": "2nd Stage ReCmp",
+            "23KA502": "3rd Stage ReCmp",
+            "27KA500": "Excess Gas cmp"
+        }
+    def get_power_kw(self, flowsheet, compressor_name):
+        """Retrieve compressor power in kW using Energy.GetValue('KW')."""
+        compressor = flowsheet.Operations.Item(compressor_name)
+        return compressor.Energy.GetValue("KW")
+
+    def run(self):
+        total_power = 0.0
+        print("Reading compressor powers...\n")
+        
+        
+        # TPL18 compressors
+        for comp, label in self.compressors_tpl18.items():
+            power = self.get_power_kw(self.tpl18, comp)
+            print(f"{comp} ({label}): {power:.2f} kW")
+            total_power += power
+
+        # TPL13 compressors
+        #for comp, label in self.compressors_tpl13.items():
+            #power = self.get_power_kw(self.tpl13, comp)
+            #print(f"{comp} ({label}): {power:.2f} kW")
+            #total_power += power
+
+        # Main flowsheet compressors
+        for comp, label in self.compressors_main.items():
+            power = self.get_power_kw(self.main_flowsheet, comp)
+            print(f"{comp} ({label}): {power:.2f} kW")
+            total_power += power
+
+        print("\nTotal Power Consumption: {:.2f} kW".format(total_power))
+        print("Total Power Consumption: {:.2f} MW".format(total_power / 1000))
+
+
+# Example usage:
+# cmp_power_sum = CMPPowerKW()
+# cmp_power_sum.run()
