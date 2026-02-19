@@ -1,0 +1,98 @@
+import os
+import pandas as pd
+import win32com.client
+from datetime import datetime
+
+# ---------- User inputs ----------
+file_path = r"C:\Users\s.ahmadi\Downloads\CapacityCheck\CMPDuty\4-Concept3B\Concept3B-sim11.usc"
+# ---------------------------------
+
+# Start UniSim
+unisim = win32com.client.Dispatch("UniSimDesign.Application")
+unisim.Visible = True
+
+# Open case
+case = unisim.SimulationCases.Open(file_path)
+main_flowsheet = case.Flowsheet
+
+# Get TPL18 (try common spellings just in case)
+try:
+    tpl18 = main_flowsheet.Flowsheets.Item("TPL18")
+except Exception:
+    try:
+        tpl18 = main_flowsheet.Flowsheets.Item("tpl-18")
+    except Exception:
+        tpl18 = main_flowsheet.Flowsheets.Item("TPL-18")  # last fallback
+
+# Output file path
+simulation_name = os.path.basename(file_path).replace(".usc", "")
+output_path = os.path.join(os.path.dirname(file_path), f"{simulation_name}_Booster_HMB2.xlsx")
+
+# Row labels (exact text requested)
+param_order = [
+    "vapourfraction",
+    "T",
+    "P",
+    "Molflow",
+    "MassFlow",
+    "AVolf",
+    "cpcv",
+    "Massden",
+    "MW",
+    "viscosity",
+    "Zfac",
+    "stdgas flow"
+]
+
+def read_stream_values(stream):
+    """
+    Read properties in the exact order specified by param_order.
+    - viscosity: mixture viscosity from stream (CP)
+    - Zfac: gas-phase Z from duplicate fluid (Item(0)) as requested
+    """
+    vf    = stream.VapourFractionValue
+    T     = stream.Temperature.GetValue("C")
+    P     = stream.Pressure.GetValue("BAR_G")           # If BAR_G isn't available in your case units, change to "bar" or "kPa"
+    mol   = stream.MolarFlow.GetValue("KGMOLE/H")
+    mass  = stream.MassFlow.GetValue("KG/H")
+    av    = stream.ActualVolumeFlow.GetValue("M3/H")
+    cpcv  = stream.CPCVValue
+    dens  = stream.MassDensity.GetValue("KG/M3")
+    mw    = stream.MolecularWeightValue
+    visc  = stream.Viscosity.GetValue("CP")             # mixture viscosity
+    dup   = stream.DuplicateFluid()
+    zfac  = dup.FluidPhases.Item(0).CompressibilityValue  # GAS phase Z (Item(0))
+    stdgs = stream.StdGasFlow.GetValue("STD_M3/D") / 1_000_000.0  # MM Sm3/d
+    return [vf, T, P, mol, mass, av, cpcv, dens, mw, visc, zfac, stdgs]
+
+# All streams are in TPL18
+stream_names = [
+    "26HJ701",
+    "26VG701",
+    "26KA750-1",
+    "26KA750-2",
+    "26KA750-3",
+]
+
+# Build dataset: columns = streams, rows = parameters
+data = {}
+for tag in stream_names:
+    stream = tpl18.Streams.Item(tag)
+    data[tag] = read_stream_values(stream)
+
+df = pd.DataFrame(data, index=param_order)
+df.index.name = "Parameter"
+
+# Safe write (handles file locked by Excel/OneDrive)
+def write_excel_with_fallback(df, path):
+    try:
+        df.to_excel(path, index=True, engine="openpyxl")
+        print(f"✅ Exported TPL18 streams HMB table to: {path}")
+    except PermissionError:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base, ext = os.path.splitext(path)
+        alt_path = f"{base}_{ts}{ext}"
+        df.to_excel(alt_path, index=True, engine="openpyxl")
+        print(f"⚠️ Target file was locked. Saved a new copy as: {alt_path}")
+
+write_excel_with_fallback(df, output_path)
