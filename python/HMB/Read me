@@ -1,1 +1,3 @@
-
+The Python based HMB files reads UniSim stream values and export to Excel.
+Results can be visualized after readig from Unisim
+It includes handling for file access issues.
