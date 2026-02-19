@@ -1,0 +1,103 @@
+import os
+import pandas as pd
+import win32com.client
+from datetime import datetime
+
+# ---------- User inputs ----------
+file_path = r"C:\Users\s.ahmadi\Downloads\CapacityCheck\CMPDuty\4-Concept3B\Concept3B-sim11.usc"
+# ---------------------------------
+
+# Start UniSim
+unisim = win32com.client.Dispatch("UniSimDesign.Application")
+unisim.Visible = True
+
+# Open case
+case = unisim.SimulationCases.Open(file_path)
+main_flowsheet = case.Flowsheet
+
+# Subflowsheets
+tpl16 = main_flowsheet.Flowsheets.Item("TPL16")
+tpl13 = main_flowsheet.Flowsheets.Item("TPL13")
+tpl18 = main_flowsheet.Flowsheets.Item("TPL18")
+tpl17 = main_flowsheet.Flowsheets.Item("TPL17")
+
+# Output file path
+simulation_name = os.path.basename(file_path).replace(".usc", "")
+output_path = os.path.join(os.path.dirname(file_path), f"{simulation_name}_HMB1.xlsx")
+
+# Row labels (exact names requested)
+param_order = [
+    "vapourfraction",
+    "T",
+    "P",
+    "Molflow",
+    "MassFlow",
+    "AVolf",
+    "cpcv",
+    "Massden",
+    "MW",
+    "viscosity",
+    "Zfac",
+    "stdgas flow"
+]
+
+def read_stream_values(stream, viscosity_mode="mixture"):
+    """
+    Read properties in the exact order specified by param_order.
+    - Zfac: gas-phase of duplicate fluid (Item(0)), exactly as in user's code.
+    - viscosity_mode: 'gas_phase' (duplicate fluid gas phase) or 'mixture' (bulk stream).
+    """
+    vf   = stream.VapourFractionValue
+    T    = stream.Temperature.GetValue("C")
+    P    = stream.Pressure.GetValue("BAR_G")          # If BAR_G fails, change to "bar" or "kPa"
+    mol  = stream.MolarFlow.GetValue("KGMOLE/H")
+    mass = stream.MassFlow.GetValue("KG/H")
+    av   = stream.ActualVolumeFlow.GetValue("M3/H")
+    cpcv = stream.CPCVValue
+    dens = stream.MassDensity.GetValue("KG/M3")
+    mw   = stream.MolecularWeightValue
+
+    dup  = stream.DuplicateFluid()
+    if viscosity_mode == "gas_phase":
+        viscosity = dup.FluidPhases.Item(0).Viscosity.GetValue("CP")   # GAS phase viscosity
+    else:
+        viscosity = stream.Viscosity.GetValue("CP")                    # mixture viscosity
+
+    zfac = dup.FluidPhases.Item(0).CompressibilityValue                # GAS phase Z (exactly as requested)
+    stdgas = stream.StdGasFlow.GetValue("STD_M3/D") / 1_000_000.0      # MM Sm3/d
+
+    return [vf, T, P, mol, mass, av, cpcv, dens, mw, viscosity, zfac, stdgas]
+
+# Columns: (Excel header, container flowsheet, UniSim stream name, viscosity_mode)
+streams_spec = [
+    ("Manifold B_1",    main_flowsheet, "Manifold B_1",    "gas_phase"),
+    ("20L8025",         tpl16,          "20L8025",         "mixture"),
+    ("105W",            tpl16,          "105W",            "mixture"),
+    ("Test manifold_1", main_flowsheet, "Test Manifold_1", "gas_phase"),
+    ("20L8001",         tpl16,          "20L8001",         "mixture"),
+    ("T_1W",            tpl16,          "T_1W",            "mixture"),
+]
+
+# Build dataset
+data = {}
+for header_label, container, unisim_name, visc_mode in streams_spec:
+    stream = container.Streams.Item(unisim_name)
+    data[header_label] = read_stream_values(stream, viscosity_mode=visc_mode)
+
+# Create DataFrame with row labels in the first column
+df = pd.DataFrame(data, index=param_order)
+df.index.name = "Parameter"
+
+# Safe Excel write: original path, else fallback with timestamp if locked/open
+def write_excel_with_fallback(df, path):
+    try:
+        df.to_excel(path, index=True, engine="openpyxl")
+        print(f"✅ Exported HMB table to: {path}")
+    except PermissionError:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base, ext = os.path.splitext(path)
+        alt_path = f"{base}_{ts}{ext}"
+        df.to_excel(alt_path, index=True, engine="openpyxl")
+        print(f"⚠️ Target file was locked. Saved a new copy as: {alt_path}")
+
+write_excel_with_fallback(df, output_path)
